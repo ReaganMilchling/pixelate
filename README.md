@@ -13,5 +13,5 @@ LEGO Colors from https://rebrickable.com/downloads/
 - cmake -DCMAKE_BUILD_TYPE=Debug .. && make
 - gdb --args ./pixelate /home/reagan/Pictures/haku.jpg
 
-- cmale .. && make
-- ./pixelate /home/reagan/Pictures/haku.jpg
+- cmake .. && make
+- ./pixelate /home/reagan/Pictures/mononoke.jpg 144 2 1

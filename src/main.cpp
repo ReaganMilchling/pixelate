@@ -1,12 +1,12 @@
-#include <algorithm>
-#include <unordered_map>
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #define STBI_FAILURE_USERMSG
 
-#include <sstream>
+#include <algorithm>
 #include <iostream>
+#include <string>
+#include <unordered_map>
 #include <vector>
 #include "stb_image.h"
 #include "stb_image_write.h"
@@ -17,6 +17,33 @@ typedef struct {
     int g;
     int b;
 } pixel;
+
+std::string toHex(int n)
+{
+    std::string hex = "0123456789ABCDEF";
+    std::string ret = "";
+    while (n) {
+        ret.push_back(hex.find(n/16));
+        n/=16;
+    }
+    return ret;
+}
+
+float redMean(pixel p1, pixel p2) 
+{
+    int red = (p1.r + p2.r) / 2;
+    float delta = (2 + (red / 256.0)) * pow((p2.r-p1.r), 2.0) 
+            + 4 * pow((p2.g-p1.g), 2.0) 
+            + (2 + ((255-red)/256.0)) * pow((p2.b-p1.b), 2.0);
+    return delta;
+}
+
+float euclidMean(pixel p1, pixel p2) 
+{
+    return pow((p2.r-p1.r), 2.0) 
+           + pow((p2.g-p1.g), 2.0) 
+           + pow((p2.b-p1.b), 2.0);
+}
 
 
 std::vector<pixel> round1x1 = {
@@ -131,36 +158,26 @@ std::vector<pixel> round1x1 = {
     {160,188,172},
 };
 
-auto comp = [](const auto p1, const auto p2)
-{
-
+auto hash = [](const pixel& n) {
+    //https://stackoverflow.com/questions/1646807/quick-and-simple-hash-code-combinations/1646913#1646913
+    return ((17 * 31 + std::hash<int>()(n.r)) * 31 + std::hash<int>()(n.g)) * 31 + std::hash<int>()(n.b);
 };
+auto equal = [](const pixel& l, const pixel& r) {
+    return l.r == r.r && l.g == r.g && l.b == r.b;
+};
+std::unordered_map<pixel, pixel, decltype(hash), decltype(equal)> pixelCache(8, hash, equal);
 
-//std::unordered_map<pixel, pixel, decltype(comp)> pixelCache(comp);
-
-std::string toHex(int n)
-{
-    std::string hex = "0123456789ABCDEF";
-    std::string ret = "";
-    while (n) {
-        ret.push_back(hex.find(n/16));
-        n/=16;
-    }
-    return ret;
-}
-
-pixel findClosestVal(pixel val)
+pixel findClosestVal(pixel val, int calc)
 {
     std::vector<std::pair<float, pixel>> diff;
 
     for (pixel p : round1x1)
     {
-        //redmean
-        int red = (p.r + val.r) / 2;
-        float delta = (2 + (red / 256.0)) * pow((val.r-p.r), 2.0) 
-            + 4 * pow((val.g-p.g), 2.0) 
-            + (2 + ((255-red)/256.0)) * pow((val.b-p.b), 2.0);
-        diff.push_back({delta, p});
+        if (calc == 0) {
+            diff.push_back({redMean(p, val), p});
+        } else if (calc == 1) {
+            diff.push_back({euclidMean(p, val), p});
+        }
     }
 
     std::sort(diff.begin(), diff.end(), [](auto &left, auto &right) {
@@ -201,7 +218,7 @@ void resize(std::string infile, std::string outfile, int block)
     stbi_image_free(img);
 }
 
-void pixelate(std::string infile, std::string outfile, int block)
+void pixelate(std::string infile, std::string outfile, int block, int calc)
 {
     int width, height, channels;
     unsigned char* img = stbi_load(infile.c_str(), &width, &height, &channels, 3);
@@ -219,13 +236,19 @@ void pixelate(std::string infile, std::string outfile, int block)
 
 
     stbir_resize_uint8_srgb(img, width, height, 0, n_img, n_width, n_height, 0, STBIR_RGB);
-    
-    for (int i = 0; i < n_width * n_height * channels; i+=channels)
+    int n = n_width * n_height * channels;
+    for (int i = 0; i < n; i+=channels)
     {
         int r = (int)(n_img[i]);
         int g = (int)(n_img[i+1]);
         int b = (int)(n_img[i+2]);
-        pixel nearest = findClosestVal({r, g, b});
+        pixel current = {r, g, b};
+        pixel nearest = pixelCache[current];
+        if (nearest.r == 0 && nearest.g == 0 && nearest.b == 0)
+        {
+            nearest = findClosestVal(current, calc);
+        }
+        //std::cout << nearest.r << nearest.g << nearest.b << std::endl; 
         //std::stringstream ss;ss << std::hex << r << g << b;std::cout << ss.str() << std::endl;
         n_img[i] = (unsigned char)nearest.r;
         n_img[i+1] = (unsigned char)nearest.g;
@@ -238,18 +261,36 @@ void pixelate(std::string infile, std::string outfile, int block)
 }
 
 int main(int argc, char *argv[])
-{
-    if (argc < 4) return -1;
+{   
+    if (argc < 3) {
+        std::cout << "Second Arg must be int size of new picture." << std::endl;
+        return -1;
+    }
+
+    if (argc < 4) {
+        std::cout << "Third Arg must be 1 for resize or another int for resize and LEGOification." << std::endl;
+        return -1;
+    }
 
     std::string infile = argv[1];
     std::string outfile = infile.substr(0, infile.find(".")) + "-pixelated.jpg";
-    int block_size = atoi(argv[2]);
-    int r = atoi(argv[3]);
+    int block_size = std::stoi(argv[2]);
+    int r = std::stoi(argv[3]);
 
     if (r == 1) {
         resize(infile, outfile, block_size);
     } else {
-        pixelate(infile, outfile, block_size);
+        if (argc < 5) {
+            std::cout << "Fourth Arg must be 1 for red mean or 0 for euclid mean." << std::endl;
+            return -1;
+        }
+        int calc = std::stoi(argv[4]);
+        if (calc == 1) {
+            outfile = outfile.substr(0, infile.find(".")) + "-red.jpg";
+        } else {
+            outfile = outfile.substr(0, infile.find(".")) + "-euclid.jpg";
+        }
+        pixelate(infile, outfile, block_size, std::stoi(argv[4]));
     }
 
     return 0;
