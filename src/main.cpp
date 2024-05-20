@@ -8,156 +8,14 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+
 #include "stb_image.h"
 #include "stb_image_write.h"
 #include "stb_image_resize2.h"
+#include "color.hpp"
 
-typedef struct {
-    int r;
-    int g;
-    int b;
-} pixel;
-
-std::string toHex(int n)
-{
-    std::string hex = "0123456789ABCDEF";
-    std::string ret = "";
-    while (n) {
-        ret.push_back(hex.find(n/16));
-        n/=16;
-    }
-    return ret;
-}
-
-float redMean(pixel p1, pixel p2) 
-{
-    int red = (p1.r + p2.r) / 2;
-    float delta = (2 + (red / 256.0)) * pow((p2.r-p1.r), 2.0) 
-            + 4 * pow((p2.g-p1.g), 2.0) 
-            + (2 + ((255-red)/256.0)) * pow((p2.b-p1.b), 2.0);
-    return delta;
-}
-
-float euclidMean(pixel p1, pixel p2) 
-{
-    return pow((p2.r-p1.r), 2.0) 
-           + pow((p2.g-p1.g), 2.0) 
-           + pow((p2.b-p1.b), 2.0);
-}
-
-
-std::vector<pixel> round1x1 = {
-    {0,143,155},
-    {0,85,191},
-    {35,120,65},
-    {201,26,9},
-    {200,112,160},
-    {109,110,92},
-    {75,159,74},
-    {242,205,55},
-    {165,169,180},
-    {255,255,255},
-    {228,205,158},
-    {228,173,200},
-    {0,32,160},
-    {132,182,141},
-    {201,26,9},
-    {99,95,82},
-    {174,239,236},
-    {223,102,149},
-    {252,252,252},
-    {165,165,203},
-    {255,128,13},
-    {88,42,18},
-    {160,165,169},
-    {88,57,39},
-    {247,133,177},
-    {108,110,104},
-    {165,169,180},
-    {165,169,180},
-    {63,54,145},
-    {156,163,168},
-    {207,226,247},
-    {207,226,247},
-    {223,238,165},
-    {240,143,28},
-    {187,233,11},
-    {189,198,173},
-    {170,127,46},
-    {114,14,15},
-    {54,174,191},
-    {217,217,217},
-    {170,125,85},
-    {173,195,192},
-    {200,112,160},
-    {155,161,157},
-    {201,26,9},
-    {252,252,252},
-    {174,239,236},
-    {132,182,141},
-    {223,102,149},
-    {248,241,132},
-    {255,128,13},
-    {217,228,167},
-    {0,32,160},
-    {240,143,28},
-    {35,120,65},
-    {207,226,247},
-    {224,224,224},
-    {137,135,136},
-    {155,154,90},
-    {146,57,120},
-    {217,228,167},
-    {248,241,132},
-    {109,110,92},
-    {169,85,0},
-    {96,116,161},
-    {149,138,115},
-    {10,52,99},
-    {53,33,0},
-    {255,240,58},
-    {88,57,39},
-    {35,120,65},
-    {252,252,252},
-    {10,52,99},
-    {228,205,158},
-    {0,32,160},
-    {201,26,9},
-    {245,205,47},
-    {217,217,217},
-    {132,182,141},
-    {174,239,236},
-    {255,128,13},
-    {174,239,236},
-    {248,241,132},
-    {212,213,201},
-    {5,19,29},
-    {172,120,186},
-    {208,145,104},
-    {245,205,47},
-    {245,205,47},
-    {114,14,15},
-    {254,138,24},
-    {165,165,203},
-    {35,120,65},
-    {248,187,61},
-    {217,217,217},
-    {62,60,57},
-    {218,176,0},
-    {223,102,149},
-    {88,57,39},
-    {90,196,218},
-    {252,252,252},
-    {248,187,61},
-    {165,169,180},
-    {160,188,172},
-    {187,165,61},
-    {90,147,219},
-    {100,90,76},
-    {174,239,236},
-    {160,188,172},
-};
-
+// decltype info comes from 
+// https://stackoverflow.com/questions/17016175/c-unordered-map-using-a-custom-class-type-as-the-key
 auto hash = [](const pixel& n) {
     //https://stackoverflow.com/questions/1646807/quick-and-simple-hash-code-combinations/1646913#1646913
     return ((17 * 31 + std::hash<int>()(n.r)) * 31 + std::hash<int>()(n.g)) * 31 + std::hash<int>()(n.b);
@@ -234,7 +92,6 @@ void pixelate(std::string infile, std::string outfile, int block, int calc)
     int n_size = n_width * n_height * channels;
     unsigned char *n_img = (unsigned char*) malloc(n_size);
 
-
     stbir_resize_uint8_srgb(img, width, height, 0, n_img, n_width, n_height, 0, STBIR_RGB);
     int n = n_width * n_height * channels;
     for (int i = 0; i < n; i+=channels)
@@ -286,9 +143,9 @@ int main(int argc, char *argv[])
         }
         int calc = std::stoi(argv[4]);
         if (calc == 1) {
-            outfile = outfile.substr(0, infile.find(".")) + "-red.jpg";
+            outfile = outfile.substr(0, outfile.find(".")) + "-red.jpg";
         } else {
-            outfile = outfile.substr(0, infile.find(".")) + "-euclid.jpg";
+            outfile = outfile.substr(0, outfile.find(".")) + "-euclid.jpg";
         }
         pixelate(infile, outfile, block_size, std::stoi(argv[4]));
     }
